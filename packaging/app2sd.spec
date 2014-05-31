@@ -1,0 +1,71 @@
+Name:       app2sd
+Summary:    Application installation on external memory
+Version:    0.5.34
+Release:    1
+Group:      Application Framework/Application Installer
+License:    Apache-2.0
+Source0:    %{name}-%{version}.tar.gz
+
+BuildRequires:  pkgconfig(libssl)
+BuildRequires:  pkgconfig(vconf)
+BuildRequires:  pkgconfig(dlog)
+BuildRequires:  pkgconfig(openssl)
+BuildRequires:  pkgconfig(db-util)
+BuildRequires:	  pkgconfig(pkgmgr-info)
+BuildRequires:	  pkgconfig(libprivilege-control)
+BuildRequires:  cmake
+
+%description
+Tizen application installation on external memory
+
+%package devel
+Summary:    Application install on external memory (devel)
+Group:      Development/Libraries
+Requires:   app2sd = %{version}-%{release}
+
+%description devel
+Tizen application installation on external memory (devel)
+
+%prep
+%setup -q
+
+%build
+
+%if 0%{?tizen_build_binary_release_type_eng}
+export CFLAGS="$CFLAGS -DTIZEN_ENGINEER_MODE"
+export CXXFLAGS="$CXXFLAGS ?DTIZEN_ENGINEER_MODE"
+export FFLAGS="$FFLAGS -DTIZEN_ENGINEER_MODE"
+%endif
+
+%cmake .
+
+make %{?jobs:-j%jobs}
+
+%install
+rm -rf %{buildroot}
+%make_install
+
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/%{name}
+
+%post -p /sbin/ldconfig
+
+%postun -p /sbin/ldconfig
+
+%files
+%manifest app2sd.manifest
+%defattr(-,root,root,-)
+%{_libdir}/libapp2ext.so.*
+%{_libdir}/libapp2sd.so*
+/usr/share/license/%{name}
+
+
+%files devel
+%defattr(-,root,root,-)
+%{_includedir}/app2ext_interface.h
+%{_libdir}/pkgconfig/app2sd.pc
+%{_libdir}/libapp2sd.so
+%{_libdir}/libapp2ext.so
+
+
+
