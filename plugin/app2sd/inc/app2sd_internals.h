@@ -186,10 +186,6 @@ int _app2sd_remove_password_from_db(const char *pkgid);
 int _app2sd_set_password_in_db(const char *pkgid,
 				      const char *passwd);
 
-/* This functions setup path for smack */
-int _app2sd_setup_path(const char *pkgid, const char *dirpath,
-						int apppathtype, const char *groupid);
-
 /* This functions make result file */
 void _app2sd_make_result_info_file(char *pkgid, int size);
 

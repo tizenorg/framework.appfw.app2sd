@@ -37,17 +37,26 @@
 #include <fcntl.h>
 #include <time.h>
 #include <dlog.h>
+#include <privilege-control.h>
 
 /*
 ########### Internal APIs ##################
  */
-enum path_type {
-	PATH_PRIVATE,
-	PATH_GROUP_RW,
-	PATH_PUBLIC_RO,
-	PATH_SETTINGS_RW,
-	PATH_ANY_LABEL
-};
+static int _app2sd_setup_path(const char *pkgid, const char *dirpath,
+						int apppathtype, const char *groupid)
+{
+	int ret = 0;
+
+	if (groupid == NULL) {
+		ret = perm_app_setup_path(pkgid, dirpath, apppathtype);
+		app2ext_print( "[smack] app_setup_path(), result = [%d]", ret);
+	} else {
+		ret = perm_app_setup_path(pkgid, dirpath, apppathtype, groupid);
+		app2ext_print( "[smack] app_setup_path(), result = [%d]", ret);
+	}
+
+	return ret;
+}
 
 static int _app2sd_apply_app_smack(const char *pkgid, GList* dir_list, const char *groupid)
 {
@@ -62,7 +71,7 @@ static int _app2sd_apply_app_smack(const char *pkgid, GList* dir_list, const cha
 		if (dir_detail && dir_detail->name
 			&& dir_detail->type == APP2EXT_DIR_RO) {
 			snprintf(path, FILENAME_MAX, "%s%s/%s",APP_INSTALLATION_PATH, pkgid, dir_detail->name);
-			ret = _app2sd_setup_path(pkgid, path, PATH_ANY_LABEL, groupid);
+			ret = _app2sd_setup_path(pkgid, path, PERM_APP_PATH_ANY_LABEL, groupid);
 			if (ret) {
 				app2ext_print ("App2Sd Error : unable to smack %s\n", path);
 				return APP2EXT_ERROR_MOVE;
@@ -88,7 +97,7 @@ static int _app2sd_apply_mmc_smack(const char *pkgid, GList* dir_list, const cha
 			&& dir_detail->type == APP2EXT_DIR_RO) {
 			snprintf(path, FILENAME_MAX, "%s%s/.mmc/%s",APP_INSTALLATION_PATH, pkgid, dir_detail->name);
 
-			ret = _app2sd_setup_path(pkgid, path, PATH_ANY_LABEL, groupid);
+			ret = _app2sd_setup_path(pkgid, path, PERM_APP_PATH_ANY_LABEL, groupid);
 			if (ret) {
 				app2ext_print ("App2Sd Error : unable to smack %s\n", path);
 				return APP2EXT_ERROR_MOVE;
@@ -520,7 +529,13 @@ static int _app2sd_create_dir_with_link(const char *pkgid,
 		}
 	}
 
-	ret = _app2sd_setup_path(pkgid, app_dir_path, PATH_ANY_LABEL, pkgid);
+	ret = _app2sd_setup_path(pkgid, app_dir_path, PERM_APP_PATH_ANY_LABEL, pkgid);
+	if (ret) {
+		app2ext_print ("App2Sd Error : unable to smack %s\n", app_dir_path);
+		return APP2EXT_ERROR_MOVE;
+	}
+
+	ret = _app2sd_setup_path(pkgid, app_dir_mmc_path, PERM_APP_PATH_ANY_LABEL, pkgid);
 	if (ret) {
 		app2ext_print ("App2Sd Error : unable to smack %s\n", app_dir_mmc_path);
 		return APP2EXT_ERROR_MOVE;

@@ -3,13 +3,13 @@ PROJECT(app2sd C)
 
 ### Required packages
 INCLUDE(FindPkgConfig)
-pkg_check_modules(pkgs REQUIRED libssl dlog openssl db-util pkgmgr-info vconf)
+pkg_check_modules(pkgs REQUIRED libssl dlog openssl db-util pkgmgr-info vconf libprivilege-control)
 
 FOREACH(flag ${pkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
 ENDFOREACH(flag)
 
-pkg_check_modules(libpkgs REQUIRED libssl dlog openssl db-util pkgmgr-info vconf)
+pkg_check_modules(libpkgs REQUIRED libssl dlog openssl db-util pkgmgr-info vconf libprivilege-control)
 
 FOREACH(flag ${libpkgs_CFLAGS})
 	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
