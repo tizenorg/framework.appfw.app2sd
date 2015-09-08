@@ -1,0 +1,10 @@
+/unit/utc_ApplicationFW_app2ext_init_func
+/unit/utc_ApplicationFW_app2ext_deinit_func
+/unit/utc_ApplicationFW_app2ext_get_app_location_func
+/unit/utc_ApplicationFW_app2ext_pre_install_func
+/unit/utc_ApplicationFW_app2ext_post_install_func
+/unit/utc_ApplicationFW_app2ext_pre_upgrade_func
+/unit/utc_ApplicationFW_app2ext_post_upgrade_func
+/unit/utc_ApplicationFW_app2ext_move_func
+/unit/utc_ApplicationFW_app2ext_pre_uninstall_func
+/unit/utc_ApplicationFW_app2ext_post_uninstall_func
