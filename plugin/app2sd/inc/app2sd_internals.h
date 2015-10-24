@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <sys/mount.h>
 #include <app2sd_interface.h>
+#include <math.h>
 
 #define DIR_PERMS (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
 
@@ -58,6 +59,7 @@
 #define DEV_MAJOR		7
 
 #define FS_TYPE		"ext4"
+#define INTERNAL_STORAGE_PATH "/opt/usr"
 
 typedef enum mount_type_t {
 	MOUNT_TYPE_RD = 0,

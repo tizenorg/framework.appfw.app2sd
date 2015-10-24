@@ -28,6 +28,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -49,6 +50,8 @@ int _xsystem(const char *argv[])
 {
 	int status = 0;
 	pid_t pid;
+	char err_buf[1024] = {0,};
+
 	pid = fork();
 	switch (pid) {
 	case -1:
@@ -56,8 +59,9 @@ int _xsystem(const char *argv[])
 		return -1;
 	case 0:
 		/* child */
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		if (execvp(argv[0], (char *const *)argv) < 0) {
-			fprintf(stderr, "execvp failed %d....%s\n", errno, strerror(errno));	/*Don't use d_msg_app2sd */
+			fprintf(stderr, "execvp failed %d....%s\n", errno, err_buf);	/*Don't use d_msg_app2sd */
 		}
 		_exit(-1);
 	default:
@@ -118,6 +122,7 @@ int _app2sd_get_available_free_memory(const char *sd_path, int *free_mem)
 {
 	struct statvfs buf;
 	int ret = 0;
+	unsigned long long temp = 0;
 	if (sd_path == NULL || free_mem == NULL) {
 		app2ext_print("App2Sd Error : Invalid input parameter\n");
 		return -1;
@@ -129,23 +134,26 @@ int _app2sd_get_available_free_memory(const char *sd_path, int *free_mem)
 		    ("App2SD Error: Unable to get SD Card memory information\n");
 		return APP2EXT_ERROR_MMC_INFORMATION;
 	}
-	*free_mem = ((buf.f_bfree * buf.f_bsize) / 1024) / 1024;
+	temp = (unsigned long long)buf.f_bsize*buf.f_bavail;
+	*free_mem = (int)(temp/(1024*1024));
 	return 0;
 }
 
 int _app2sd_delete_directory(char *dirname)
 {
 	DIR *dp = NULL;
-	struct dirent *ep = NULL;
+	struct dirent ep;
+	struct dirent *er = NULL;
 	char abs_filename[FILENAME_MAX] = { 0, };
 	int ret = 0;
+
 	dp = opendir(dirname);
 	if (dp != NULL) {
-		while ((ep = readdir(dp)) != NULL) {
+		while (readdir_r(dp, &ep, &er) == 0 && er != NULL) {
 			struct stat stFileInfo;
 
 			snprintf(abs_filename, FILENAME_MAX, "%s/%s", dirname,
-				ep->d_name);
+				ep.d_name);
 
 			if (lstat(abs_filename, &stFileInfo) < 0) {
 				perror(abs_filename);
@@ -154,8 +162,8 @@ int _app2sd_delete_directory(char *dirname)
 			}
 
 			if (S_ISDIR(stFileInfo.st_mode)) {
-				if (strcmp(ep->d_name, ".")
-				    && strcmp(ep->d_name, "..")) {
+				if (strcmp(ep.d_name, ".")
+				    && strcmp(ep.d_name, "..")) {
 					ret = _app2sd_delete_directory(abs_filename);
 					if (ret <0) {
 						(void)closedir(dp);
@@ -184,23 +192,26 @@ void _app2sd_delete_symlink(const char *dirname)
 {
 	int ret = 0;
 	DIR *dp = NULL;
-	struct dirent *ep = NULL;
+	struct dirent ep;
+	struct dirent *er = NULL;
 	char abs_filename[FILENAME_MAX] = { 0, };
 
 	app2ext_print("star clean_symlink [%s]", dirname);
 
 	dp = opendir(dirname);
 	if (dp != NULL) {
-		while ((ep = readdir(dp)) != NULL) {
-			struct stat stFileInfo;
+		while (readdir_r(dp, &ep, &er) == 0 && er != NULL) {
 			char mmc_path[PATH_MAX] = {0};
 
-			if (!strcmp(ep->d_name, ".") || !strcmp(ep->d_name, ".."))
+			if (!strcmp(ep.d_name, ".") || !strcmp(ep.d_name, ".."))
 				continue;
 
 			/*get realpath find symlink to ".mmc" and unlink it*/
-			snprintf(abs_filename, FILENAME_MAX, "%s/%s", dirname, ep->d_name);
-			realpath(abs_filename, mmc_path);
+			snprintf(abs_filename, FILENAME_MAX, "%s/%s", dirname, ep.d_name);
+			char *path = realpath(abs_filename, mmc_path);
+			if(!path){
+				app2ext_print("realpath failed\n");
+			}
 
 			if (strstr(mmc_path,".mmc")) {
 				app2ext_print("force unlink [%s]", abs_filename);
@@ -257,15 +268,17 @@ unsigned long long _app2sd_calculate_dir_size(char *dirname)
 {
 	static unsigned long long total = 0;
 	DIR *dp = NULL;
-	struct dirent *ep = NULL;
+	struct dirent ep;
+	struct dirent *er = NULL;
 	char abs_filename[FILENAME_MAX] = { 0, };;
+
 	dp = opendir(dirname);
 	if (dp != NULL) {
-		while ((ep = readdir(dp)) != NULL) {
+		while (readdir_r(dp, &ep, &er) == 0 && er != NULL) {
 			struct stat stFileInfo;
 
 			snprintf(abs_filename, FILENAME_MAX, "%s/%s", dirname,
-				 ep->d_name);
+				 ep.d_name);
 
 			if (stat(abs_filename, &stFileInfo) < 0)
 				perror(abs_filename);
@@ -273,8 +286,8 @@ unsigned long long _app2sd_calculate_dir_size(char *dirname)
 				total += stFileInfo.st_size;
 
 				if (S_ISDIR(stFileInfo.st_mode)) {
-					if (strcmp(ep->d_name, ".")
-					    && strcmp(ep->d_name, "..")) {
+					if (strcmp(ep.d_name, ".")
+					    && strcmp(ep.d_name, "..")) {
 						_app2sd_calculate_dir_size
 						    (abs_filename);
 					}
@@ -313,6 +326,8 @@ char *_app2sd_encrypt_device(const char *device, const char *pkgid,
 	char buf[FILENAME_MAX] = { 0, };
 	char *ret_result = NULL;
 	int result = 0;
+	char err_buf[1024] = {0,};
+
 	if (pipe(my_pipe) < 0) {
 		fprintf(stderr, "Unable to create pipe\n");
 		return NULL;
@@ -328,26 +343,29 @@ char *_app2sd_encrypt_device(const char *device, const char *pkgid,
 		close(2);
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		if (execvp(argv[0], (char *const *)argv) < 0) {
-			fprintf(stderr, "execvp failed %d....%s\n", errno, strerror(errno));	/*Don't use d_msg_app2sd */
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "execvp failed %d....%s\n", errno, err_buf);	/*Don't use d_msg_app2sd */
 		}
 		_exit(-1);
 	default:
 		/* parent */
 		close(my_pipe[1]);
 		result = read(my_pipe[0], buf, FILENAME_MAX);
-		if (result < 0)
-			fprintf(stderr, "read failed %d....%s\n", errno, strerror(errno));
+		if (result < 0) {
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "read failed %d....%s\n", errno, err_buf);
+		}
 		break;
 	}
 
@@ -370,6 +388,8 @@ char *_app2sd_detach_loop_device(const char *device)
 	char buf[FILENAME_MAX] = { 0, };
 	char *ret_result = NULL;
 	int result = 0;
+	char err_buf[1024] = {0,};
+
 	if (pipe(my_pipe) < 0) {
 		fprintf(stderr, "Unable to create pipe\n");
 		return NULL;
@@ -385,14 +405,14 @@ char *_app2sd_detach_loop_device(const char *device)
 		close(2);
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		if (execvp(argv[0], (char *const *)argv) < 0) {
@@ -403,8 +423,10 @@ char *_app2sd_detach_loop_device(const char *device)
 		/* parent */
 		close(my_pipe[1]);
 		result = read(my_pipe[0], buf, FILENAME_MAX);
-		if (result < 0)
-			fprintf(stderr, "read failed %d....%s\n", errno, strerror(errno));
+		if (result < 0) {
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "read failed %d....%s\n", errno, err_buf);
+		}
 		break;
 	}
 
@@ -428,6 +450,8 @@ char *_app2sd_find_associated_device(const char *mmc_app_path)
 	char buf[FILENAME_MAX] = { 0, };
 	char *ret_result = NULL;
 	int result = 0;
+	char err_buf[1024] = {0,};
+
 	if (pipe(my_pipe) < 0) {
 		fprintf(stderr, "Unable to create pipe\n");
 		return NULL;
@@ -443,14 +467,14 @@ char *_app2sd_find_associated_device(const char *mmc_app_path)
 		close(2);
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		if (execvp(argv[0], (char *const *)argv) < 0) {
@@ -461,8 +485,10 @@ char *_app2sd_find_associated_device(const char *mmc_app_path)
 		/* parent */
 		close(my_pipe[1]);
 		result = read(my_pipe[0], buf, FILENAME_MAX);
-		if (result < 0)
-			fprintf(stderr, "read failed %d....%s\n", errno, strerror(errno));
+		if (result < 0) {
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "read failed %d....%s\n", errno, err_buf);
+		}
 		break;
 	}
 
@@ -483,9 +509,11 @@ char *_app2sd_find_free_device(void)
 	const char *argv[] = { "/sbin/losetup", "-f", NULL };
 	pid_t pid;
 	int my_pipe[2] = { 0, };
-	char buf[FILENAME_MAX+1] = { 0, };
+	char buf[FILENAME_MAX + 1] = { 0, };
 	char *ret_result = NULL;
 	int result = 0;
+	char err_buf[1024] = {0,};
+
 	if (pipe(my_pipe) < 0) {
 		fprintf(stderr, "Unable to create pipe\n");
 		return NULL;
@@ -501,14 +529,14 @@ char *_app2sd_find_free_device(void)
 		close(2);
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		result = dup(my_pipe[1]);
 		if (result < 0) {
-			fprintf(stderr, "dup failed %d....%s\n", errno, strerror(errno));
-			close(result);
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "dup failed %d....%s\n", errno, err_buf);
 			_exit(-1);
 		}
 		if (execvp(argv[0], (char *const *)argv) < 0) {
@@ -519,8 +547,10 @@ char *_app2sd_find_free_device(void)
 		/* parent */
 		close(my_pipe[1]);
 		result = read(my_pipe[0], buf, FILENAME_MAX);
-		if (result < 0)
-			fprintf(stderr, "read failed %d....%s\n", errno, strerror(errno));
+		if (result < 0) {
+			strerror_r(errno, err_buf, sizeof(err_buf));
+			fprintf(stderr, "read failed %d....%s\n", errno, err_buf);
+		}
 		break;
 	}
 
@@ -549,6 +579,7 @@ char *_app2sd_generate_password(const char *pkgid)
 	int i = 0;
 	int appname_len = strlen(pkgid);
 	int j = appname_len;
+	unsigned int seed;
 
 	/* Length of the password */
 	ret_result = (char*)malloc(PASSWD_LEN+1);
@@ -559,8 +590,9 @@ char *_app2sd_generate_password(const char *pkgid)
 	memset((void *)ret_result, '\0', PASSWD_LEN+1);
 
 	while(i < PASSWD_LEN) {
-		char_1 = (rand()+pkgid[j--])%ASCII_PASSWD_CHAR;
-		char_2 = rand()%ASCII_PASSWD_CHAR;
+		seed = time(NULL);
+		char_1 = (rand_r(&seed)+pkgid[j--])%ASCII_PASSWD_CHAR;
+		char_2 = rand_r(&seed)%ASCII_PASSWD_CHAR;
 		passwd[i] = set[char_1];
 		passwd[i+1] = set[(pkgid[j--])*2];
 		if (i<PASSWD_LEN-3)

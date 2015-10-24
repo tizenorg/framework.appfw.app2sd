@@ -40,6 +40,7 @@ int app2sd_pre_app_install(const char *pkgid, GList* dir_list,
 	char *device_node = NULL;
 	char *devi = NULL;
 	char *result = NULL;
+	int reqd_disk_size = size + ceil(size*0.2);
 
 	/*Validate the function parameter recieved */
 	if (pkgid == NULL || dir_list == NULL || size <= 0) {
@@ -60,13 +61,15 @@ int app2sd_pre_app_install(const char *pkgid, GList* dir_list,
 		app2ext_print("App2Sd Error : Unable to get available free memory in MMC %d\n", ret);
 		return APP2EXT_ERROR_MMC_STATUS;
 	}
+	app2ext_print("Size details for application installation:size=%dMB, reqd_disk_size=%dMB, free_mmc_size=%dMB\n",
+			 size, reqd_disk_size, free_mmc_mem);
 	/*If avaialalbe free memory in MMC is less than required size + 5MB , return error */
-	if ((size + PKG_BUF_SIZE + MEM_BUF_SIZE) > free_mmc_mem) {
+	if ((reqd_disk_size + PKG_BUF_SIZE + MEM_BUF_SIZE) > free_mmc_mem) {
 		app2ext_print("Insufficient memory in MMC for application installation %d\n", ret);
 		return APP2EXT_ERROR_MMC_INSUFFICIENT_MEMORY;
 	}
 	/*Create a loopback device */
-	ret = _app2sd_create_loopback_device(pkgid, (size+PKG_BUF_SIZE));
+	ret = _app2sd_create_loopback_device(pkgid, (reqd_disk_size+PKG_BUF_SIZE));
 	if (ret) {
 		app2ext_print("App2Sd Error : Package already present\n");
 		char buf_dir[FILENAME_MAX] = { 0, };
@@ -219,7 +222,7 @@ int app2sd_post_app_install(const char *pkgid,
 		int rt = 0;
   		rt = pkgmgrinfo_pkginfo_set_installed_storage(pkgid, INSTALL_EXTERNAL);
 		if (rt < 0) {
-			app2ext_print("fail to update installed location to db[%s, %s]\n", pkgid, INSTALL_EXTERNAL);
+			app2ext_print("fail to update installed location to db[%s, %d]\n", pkgid, INSTALL_EXTERNAL);
 		}
 	}
 	return ret;
@@ -561,7 +564,7 @@ int app2sd_move_installed_app(const char *pkgid, GList* dir_list,
 END:
 
 //	vconf_set_int(VCONFKEY_PKGMGR_STATUS, ret);
-	_app2sd_make_result_info_file(pkgid, ret);
+	_app2sd_make_result_info_file((char*)pkgid, ret);
 
 	return ret;
 }
@@ -574,6 +577,7 @@ int app2sd_pre_app_upgrade(const char *pkgid, GList* dir_list,
 	char *device_node = NULL;
 	unsigned long long curr_size = 0;
 	FILE *fp = NULL;
+	int reqd_disk_size = size + ceil(size*0.2);
 
 	/*Validate function arguments*/
 	if (pkgid == NULL || dir_list == NULL || size<=0) {
@@ -601,15 +605,15 @@ int app2sd_pre_app_upgrade(const char *pkgid, GList* dir_list,
 	fclose(fp);
 	/*Get installed app size*/
 	curr_size = _app2sd_calculate_file_size(app_path);
-	curr_size = (curr_size/1024)/1024;
+	curr_size = (curr_size)/(1024 * 1024);
 
 	if (curr_size==0) {
 		app2ext_print
 		    ("App2SD Error: App Entry is not present in SD Card\n");
 		return APP2EXT_ERROR_LOOPBACK_DEVICE_UNAVAILABLE;
 	}
-	if (curr_size<size) {
-		ret = _app2sd_update_loopback_device_size(pkgid, size, dir_list);
+	if ((int)curr_size < reqd_disk_size) {
+		ret = _app2sd_update_loopback_device_size(pkgid, reqd_disk_size, dir_list);
 		if(APP2EXT_SUCCESS !=ret) {
 			app2ext_print
 			    ("App2SD Error: _app2sd_update_loopback_device_size() failed\n");
@@ -630,7 +634,7 @@ int app2sd_pre_app_upgrade(const char *pkgid, GList* dir_list,
 		/*Do  mounting */
 		ret =
 		    _app2sd_mount_app_content(pkgid, device_node,
-					MOUNT_TYPE_RW, NULL,
+					MOUNT_TYPE_RW, dir_list,
 					APP2SD_PRE_UPGRADE);
 		if (ret) {
 			app2ext_print("App2Sd Error : Re-mount failed\n");

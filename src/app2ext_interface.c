@@ -214,7 +214,7 @@ int app2ext_enable_external_dir(void)
 	int ret = 0;
 	DIR *dir = NULL;
 	char buf[FILENAME_MAX] = { 0, };
-	struct dirent entry, *result;
+	struct dirent entry, *result = NULL;
 
 	dir = opendir(APP2SD_PATH);
 	if (!dir) {
@@ -238,7 +238,7 @@ int app2ext_disable_external_dir(void)
 	int ret = 0;
 	DIR *dir = NULL;
 	char buf[FILENAME_MAX] = { 0, };
-	struct dirent entry, *result;
+	struct dirent entry, *result = NULL;
 
 	dir = opendir(APP2SD_PATH);
 	if (!dir) {
